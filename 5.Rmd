@@ -1,0 +1,808 @@
+---
+title: "Homework 5 -- Simulations and Classification Analysis"
+author: "your name"
+date: "Spring 2022"
+output:
+  word_document:
+    toc: yes
+  html_document:
+    toc: yes
+---
+
+##  Set up
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+# load packages
+pacman::p_load(class, caTools, caret, rpart,
+               rpart.plot, tidyverse, skimr)
+
+# Changing the default theme
+theme_set(theme_bw())
+
+```
+
+
+## Question 1): Monty & Carl's Gambling Simulation
+
+### a) Monty's Roulette Wheel Simulation
+
+Starting amount = $500
+Target amount = $1000
+Bet amount = $100
+
+```{r 1a_rouletteWheelSim}
+# Use the vector below to sample from to simulate a roulette wheel spin
+# 1 indicates a win, -1 indicates a loss
+roulette_spin <- c(rep(1, 18), 
+                   rep(-1, 20))
+
+
+
+# Setting the default choices before starting the while loop
+# Monty's starting money
+current_amount <- 500
+
+
+
+# No spins before he starts betting
+spins <-  0
+
+
+
+# Making the result of the simulation not random:
+RNGversion("4.0.0")
+set.seed(1234)
+
+# Place your while loop directly below these lines to ensure your results align with the solutions:
+
+while(between(current_amount, 0.01, 999.99)){
+  
+  # Updating the number of spins
+  spins <- spins + 1
+  
+  # Using sample() with the roulette_spin vector to randomly spin the wheel
+  spin_result <- sample(roulette_spin, 
+                        size = 1)
+  
+  # Adding the spin result to Monty's current amount:
+  current_amount <- current_amount + 100*spin_result
+}
+
+
+# Show the results of the single simulation
+current_amount
+spins
+  
+```
+
+**Did Monty win or lose?**
+
+
+
+### b) Creating function to simulate the roulette bets
+
+```{r 1b_rouletteFuncion}
+
+Monty_Carl_roulette <- 
+  function(starting_amount = 500,
+           target_amount = 1000,
+           bet_amount = 100){
+  
+  # Place this vector at the beginning of your function
+  roulette_spin <- c(rep(1, 18), 
+                     rep(-1, 20))
+
+  # Setting the current amount to the starting amount
+  current_amount <- starting_amount
+
+  # No spins before he starts betting
+  spins <-  0
+
+
+  while(between(current_amount, 0.01, target_amount-0.01)){
+  
+    # Updating the number of spins
+    spins <- spins + 1
+  
+    # Using sample() with the roulette_spin vector to randomly spin the wheel
+    spin_result <- sample(roulette_spin, 
+                        size = 1)
+  
+    # Adding the spin result to Monty's current amount:
+    current_amount <- current_amount + spin_result*bet_amount
+  }
+  
+  # Determine if Monty won or lost:
+  game_result <- if_else(current_amount == 0,
+                         "lost",
+                         "won")
+  
+  # Need a return statement to tell the function what it should return
+  return(list(result = game_result,
+              n_spins = spins))
+}
+
+
+RNGversion("4.0.0")
+set.seed(1234)
+
+# Checking if the function gives the same results as 1a)
+Monty_Carl_roulette()
+
+
+# Simulation values set 2:
+Monty_Carl_roulette(bet_amount = 50)
+
+
+# Simulation values set 3:
+Monty_Carl_roulette(starting_amount = 1000,
+                    target_amount = 2000,
+                    bet_amount = 200)
+
+# Simulation values set 4:
+Monty_Carl_roulette(starting_amount = 100,
+                    target_amount = 200,
+                    bet_amount = 100)
+
+
+
+
+
+```
+
+
+### 1c) Simulating 5,000 results for the 4 different bet amount
+
+
+
+```{r 1c_dicesim}
+# Keep these 2 lines at the top of the codechunk
+RNGversion("4.0.0")
+set.seed(1234)
+
+
+# Use the 4 vectors below to store the results: bet50, bet100, bet250, bet500
+bet50 <- rep("Monty", rep = 5000)
+bet100 <- rep("Monty", rep = 5000)
+bet250 <- rep("Monty", rep = 5000)
+bet500 <- rep("Monty", rep = 5000)
+
+
+
+# Write the simulation below...
+for (i in 1:5000){
+  bet50[i] <- Monty_Carl_roulette(starting_amount = 500,
+                                  target_amount = 1000,
+                                  bet_amount = 50)$result
+  
+  bet100[i] <- Monty_Carl_roulette(starting_amount = 500,
+                                  target_amount = 1000,
+                                  bet_amount = 100)$result
+  
+  bet250[i] <- Monty_Carl_roulette(starting_amount = 500,
+                                  target_amount = 1000,
+                                  bet_amount = 250)$result
+  
+  bet500[i] <- Monty_Carl_roulette(starting_amount = 500,
+                                  target_amount = 1000,
+                                  bet_amount = 500)$result
+}
+
+# Combine the 4 vectors together into one data.frame named bet_sim
+bet_sim <- 
+  data.frame(bet50,
+             bet100,
+             bet250,
+             bet500)
+
+head(bet_sim)
+
+```
+
+
+### Part 1d) Plotting the Simulation Results
+
+```{r 1d_winProb}
+bet_sim %>% 
+  pivot_longer(cols = bet50:bet500,
+               values_to = "result",
+               names_to = "bet_amount") %>% 
+  
+  mutate(bet_amount = factor(parse_number(bet_amount))) %>% 
+  
+  group_by(bet_amount, result) %>% 
+  
+  summarize(result_n = n()) %>% 
+  
+  mutate(result_prop = result_n/sum(result_n)) %>% 
+  
+  
+  ggplot(mapping = aes(x = bet_amount,
+                       fill = result,
+                       y = result_prop)) + 
+  
+  geom_col(color = "black") + 
+  
+  labs(x = "Bet Amount ($)",
+       y = "Percentage") +
+  
+  scale_y_continuous(labels = scales::percent,
+                     expand = expansion(add = c(0, 0.02),
+                                        mult = 0)) 
+
+```
+
+
+
+
+
+## Question 2) Beer Analysis 
+
+### a) Description
+
+We are trying to predict the style of a beer based on ABV and IBU. 
+
+We'll use the kNN algorithm -- matching test cases with examples that are closest, using k as the group size for determining similarity.
+
+
+### b) Read in beer data and summarize
+
+```{r 2b_readbeer}
+# Run the line below to clear the objects created in question 1
+rm(list = ls())
+
+# Read in the beer data
+beer <- read.csv('beer5.csv') 
+
+# recode style as a factor
+beer$style <- factor(beer$style)
+
+# summarize data
+skim(beer)
+
+```
+
+### c) Normalize data
+
+```{r 2c_normalize}
+# create normalization function
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+# normalize the beer data
+beer_norm <- beer %>% 
+  mutate(across(.cols = where(is.numeric),
+                .fns = normalize))
+
+# confirm that normalization worked
+skim(beer_norm)
+
+```
+
+###  d) Divide into Training and Test sets
+
+```{r  2d_divideData}
+RNGversion("4.0.0")
+set.seed(1234)
+
+# Using sample.split() to divide the data into a training (2/3) and testing (1/3) set:
+beer_split <- sample.split(beer$style, SplitRatio = 2/3)
+
+# Using indexing to pick the rows for the training set
+beer_nTrain <- beer_norm[beer_split,]
+
+# Using indexing to pick the rows for the testing set
+beer_nTest <- beer_norm[!beer_split,]
+
+head(beer_nTrain)
+head(beer_nTest)
+
+```
+
+### e) Run kNN on Normalized data
+
+
+```{r 2e_kNNnorm}
+RNGversion("4.0.0")
+set.seed(1234)
+norm_knn <- knn(train = beer_nTrain %>% select(where(is.numeric)),   # The training data
+                test = beer_nTest %>% select(where(is.numeric)),     # The test data
+                cl = beer_nTrain$style,                   # The training response 
+                k =  8)
+
+
+# Calculating the number of correctly predicted beers:
+sum(norm_knn == beer_nTest$style)
+
+# Confusion Matrix:
+confusionMatrix(data = norm_knn,                  # Predicted response
+                reference = beer_nTest$style,    # Observed response
+                dnn = c("Prediction", "Actual"))   
+
+
+
+```
+
+The accuracy of kNN when k = 8 is 201/249 = 81% when the data are normalized
+
+
+### f) Run kNN on Normalized data for k = 10 to 30
+
+```{r 2f_normK}
+# Different choices of k
+k_choice = 5:25
+
+# Matrix to store the results in
+k_results <- data.frame(k = k_choice,
+                        accuracy = rep(-1, length(k_choice)))
+
+# Setting the seed so the results are always the same:
+RNGversion("4.0.0")
+set.seed(123)
+
+# looping through the different choices of k
+for (i in 1:length(k_choice)){
+  
+  # KNN using normalized results
+  norm_knn <- knn(train = beer_nTrain %>% select(where(is.numeric)),   # The training data
+                  test = beer_nTest %>% select(where(is.numeric)),     # The test data
+                  cl = beer_nTrain$style,                       
+                  k =  k_choice[i])
+  
+  # Confusion matrix for normalized results
+  cmn <- confusionMatrix(data = norm_knn,              
+                         reference = beer_nTest$style,          
+                         dnn = c("Prediction", "Actual"))  
+  
+  
+  # Saving the results in the k_results matrix: normalization = col2
+  k_results[i, 1] <- k_choice[i]
+  k_results[i, 2] <- cmn$overall["Accuracy"]
+}
+
+# Looking at the results
+head(k_results)
+
+# Graphing the results:
+ggplot(data = k_results,
+       mapping = aes(x = k)) + 
+
+  geom_line(mapping = aes(y = accuracy), 
+            color = "blue") +
+  
+  geom_point(mapping = aes(y = accuracy),
+             color = "orange2") + 
+  
+  labs(y = "Correct Predictions") +
+  
+  scale_x_continuous(breaks = k_choice, 
+                     minor_breaks = NULL)
+
+```
+
+When the data are normalized, it looks like k = 7 has the highest accuracy at almost 82%
+
+### g) Standardize Data 
+
+```{r 2g_standardize}
+# create standardize function; summarize data to make sure it worked
+standardize <- function(x) {
+  return ((x - mean(x))/sd(x))
+}
+
+# standardize the beer data
+beer_stan <- 
+  beer %>% 
+  mutate(across(.cols = where(is.numeric),
+                .fns = standardize))
+
+# confirm that the transformation was applied correctly
+skim(beer_stan)
+
+```
+
+### h) Run kNN on Standardized data for k = 5 to 20
+
+```{r 2h_kNNstand}
+set.seed(1234)
+
+k_choice = 5:25
+
+# Matrix to store the results in
+k_results2 <- data.frame(k = k_choice,
+                         accuracy = rep(-1, length(k_choice)))
+
+# Using indexing to pick the rows for the training set of the standardized values
+beer_sTrain <- beer_stan[beer_split,]
+
+# Using indexing to pick the rows for the testing set of the standardized values
+beer_sTest <- beer_stan[!beer_split,]
+
+
+# looping through the different choices of k
+for (i in 1:length(k_choice)){
+  
+  # KNN using normalized results
+  stan_knn <- knn(train = beer_sTrain %>% select(where(is.numeric)),   # The training data
+                  test = beer_sTest %>% select(where(is.numeric)),     # The test data
+                  cl = beer_sTrain$style,                       
+                  k =  k_choice[i])
+  
+  # Confusion matrix for normalized results
+  cmz <- confusionMatrix(data = stan_knn,              
+                         reference = beer_stan$style[!beer_split],          
+                         dnn = c("Prediction", "Actual"))  
+  
+  
+  # Saving the results in the k_results matrix: normalization = col2
+  k_results2[i, 1] <- k_choice[i]
+  k_results2[i, 2] <- cmz$overall["Accuracy"]
+}
+
+# Looking at the results
+head(k_results2)
+
+# Graphing the results:
+ggplot(data = k_results2,
+       mapping = aes(x = k)) + 
+
+  geom_line(aes(y = accuracy), 
+            color = "orange") + 
+  scale_x_continuous(breaks = k_choice, 
+                     minor_breaks = NULL)
+
+```
+
+From the graph it appears that k should be between 13, which has an accuracy of almost 82%
+
+
+### Conclusions
+
+```{r both_graphs}
+bind_rows("standardized" = k_results2,
+          "normalized" = k_results,
+          .id = "Rescaling") %>% 
+  
+  ggplot(mapping = aes(x = k,
+                       y = accuracy,
+                       color = Rescaling)) + 
+  
+  geom_line(size = 1) + 
+  
+  scale_x_continuous(breaks = k_choice, 
+                     minor_breaks = NULL)
+```
+
+
+From the graph, the best choice to predict the style of a beer is to either to normalize the data and use k = 7 or standardize the data and use k = 13. Both have the same accuracy in the trial data of about 82%
+
+
+
+
+
+
+
+## Question 3) Car Acceptability 
+
+### a) Description
+
+We will do a decision tree analysis, in order to predict whether used cars are acceptable or not, letting 'good' and 'very good' be considered acceptable.
+
+### b) Read in data, fix classification feature, and summarize
+
+```{r 3b_carData}
+# Run the line below to clear the objects created in question 2
+rm(list = ls())
+cars <- read.csv("car.csv")
+
+# look at the class variable before fixing
+table(cars$acceptability)
+
+# don't have to turn it into a character, but do need to change it back to a factor in line 141
+cars <- cars %>% 
+  mutate(acceptability = if_else(acceptability == "unacc",
+                                 "reject", 
+                                 "accept"),
+         
+         acceptability = factor(acceptability,
+                                levels = c("reject", 
+                                           "accept")))
+  
+
+#  now skim the data
+skim(cars)
+```
+
+
+### c) Create training and test set, compare proportions
+
+```{r 3c_carTrainTest}
+RNGversion("4.0.0")
+set.seed(1234)
+car_split <- sample.split(cars$acceptability, 
+                          SplitRatio = 1200/nrow(cars))
+
+# Getting the car training data set:
+car_train <- cars[car_split, ]
+
+# Getting the car testing data set:
+car_test <- cars[!car_split, ]
+
+
+# Checking the proportion of acceptable and unacceptable for the test and train data sets
+bind_rows(train = table(car_train$acceptability) %>% prop.table(),
+          test = table(car_test$acceptability) %>% prop.table(), 
+          .id = "set")
+
+```
+
+### Part 3d i) Create the full classification tree
+
+**What choice of complexity parameter (cp) should you use to prune the tree?**
+
+```{r 3d_firstModel}
+car_tree_full <- rpart(acceptability ~ ., 
+                       data = car_train,
+                       method = "class",
+                       parms = list(split = "information"),
+                       minsplit = 2,
+                       minbucket = 1,
+                       cp = -1)
+
+# Looking at the cp table to find where to prune the tree
+car_tree_full$cptable
+```
+
+Depends on how they decide to prune the tree, they could end with a two different trees:
+
+- A complexity parameter between 0.0017 and 0.0027 (Most complicated tree, lowest xerror + xstd rate)
+- A complexity parameter between 0.01 to 0.029 (Simplest tree, based on the xerror with large decreases)
+
+
+### Part 3d ii) Pruning the classification tree
+
+**Prune the classification tree using the cp stated in your answer to part i), plot the tree, and create the confusion matrix**
+
+The below results are for the more complicated tree that has a lower error rate
+```{r 3dii_pruneTree}
+car_tree_complex <- prune(car_tree_full,
+                         cp = 0.002)
+
+
+
+# Plotting the pruned classification tree
+rpart.plot(car_tree_complex,
+           type = 5,
+           extra = 102)
+```
+
+
+
+The code below shows the simpler tree
+
+```{r 3d_simpleTree}
+car_tree_simple <- prune(car_tree_full,
+                         cp = 0.02)
+
+
+
+# Plotting the pruned classification tree
+rpart.plot(car_tree_simple,
+           type = 5,
+           extra = 102)
+```
+
+
+
+The first 3 splits are the same for either tree:
+
+
+- 1st Split: Safety Low --> Unacceptable, medium or high --> Continue
+
+- 2nd Split:  number of passengers 2 --> Unacceptable, 4+ Continue
+
+- 3rd Split: Buying Price splits into {low, medium} --> Reject with {high, vhigh} --> Continue splitting
+
+
+
+
+### Part 3e) Tree Evaluation
+
+#### Choice 1: Complicated tree
+
+```{r 3e_treeEval}
+### Step 4: Evaluating model performance ----
+
+## Checking how well the training data was predicted:
+table(predicted = predict(car_tree_complex,
+                          type = "class"),
+      actual = car_train$acceptability)
+
+
+
+## Checking how well the tree predicted the test data
+
+# create a factor vector of predictions on test data
+car_pred_complex <- predict(object = car_tree_complex, 
+                            newdata = car_test,
+                            type = "class")
+
+
+
+# Creating the confusion matrix for the basic decision tree
+cm_comp <- confusionMatrix(data = car_pred_complex,
+                           reference = car_test$acceptability,
+                           positive = "accept",
+                           dnn = c("predicted", "actual"))
+
+cm_comp
+
+```
+
+The accuracy of the training data is 1194/1200 = 99.5%!
+
+The accuracy of the test data is `r cm_comp$overall['Accuracy']`, which is also very high, but not as high as the training data!
+
+
+
+
+
+#### 3d - Choice 2: Simpler tree
+
+```{r 3e_treeEvalSimp}
+### Step 4: Evaluating model performance ----
+
+## Checking how well the tree predicts the training data
+table(predicted = predict(car_tree_simple,
+                          type = "class"),
+      actual = car_train$acceptability)
+
+
+## Checking how well the tree predicts the test data
+
+# create a factor vector of predictions on test data
+car_pred_simple <- predict(object = car_tree_simple, 
+                           newdata = car_test,
+                           type = "class")
+
+
+
+# Creating the confusion matrix for the basic decision tree
+cm_simple <- confusionMatrix(data = car_pred_simple,
+                             reference = car_test$acceptability,
+                             positive = "accept",
+                             dnn = c("predicted", "actual"))
+
+cm_simple
+
+```
+
+The accuracy of the training data is 1154/1200 = 96.2%
+
+The accuracy of the test data is `r cm_simp$overall['Accuracy']`, which is almost as high as the training data and overall still very accurate!
+
+
+
+
+
+### Part 3f) Create the cost matrix
+
+```{r 3f_costMatrix}
+
+cost_df <- tribble(
+        ~ Actual,     ~ Predicted,  ~ Cost,
+        "accept",        "accept",      0,
+        "accept",        "reject",      1,
+        "reject",        "accept",      3,
+        "reject",        "reject",      0
+)
+
+# The cost matrix should have the actual class groups in the columns
+# xtabs formula uses Count_var ~ row_var + col_var
+# so we want the formula to be Cost ~ Predicted + Actual
+cost_mat <- xtabs(formula = Cost ~ Predicted + Actual, data = cost_df)
+
+cost_mat
+
+```
+
+###  f) Redo the tree using the cost matrix
+
+```{r 3f_costTreeFull}
+set.seed(1234)
+# Updating the tree with a cost matrix
+car_cost_tree_full <- 
+  rpart(acceptability ~ ., 
+        data = car_train,
+        method = "class",
+        parms = list(split = "information",
+                     loss = cost_mat),
+        minsplit = 2,
+        minbucket = 1,
+        cp = -1)
+
+# Looking at the cp table to find where to prune the tree
+car_cost_tree_full$cptable
+```
+
+We should prune it with a cp = 0.0042 or 0.009
+
+
+```{r 3f_pruneCost}
+car_cost_complex <- prune(car_cost_tree_full,
+                          cp = 0.0042)
+
+car_cost_simple <- prune(car_cost_tree_full,
+                         cp = 0.009)
+
+# Plotting the more complex tree
+rpart.plot(car_tree_complex,
+           type = 5,
+           extra = 102)
+
+# Plotting the simpler tree
+rpart.plot(car_cost_simple,
+           type = 5,
+           extra = 102)
+
+```
+
+
+
+### Part 3h: Evaluating model performance updated using the cost matrix ----
+
+#### Complex first
+
+```{r 3h_predComplex}
+car_pred2_complex <- 
+  predict(car_cost_complex, 
+          newdata = car_test,
+          type = "class")
+
+# Creating the confusion matrix for the decision tree using the cost matrix
+cm2_complex <- 
+  confusionMatrix(data = car_pred2_complex,
+                  reference = car_test$acceptability,
+                  positive = "accept",
+                  dnn = c("predicted", "actual"))
+
+cm2_complex
+
+```
+
+#### Simple next
+
+```{r 3h_predComplex}
+car_pred2_simple <- 
+  predict(car_cost_simple, 
+          newdata = car_test,
+          type = "class")
+
+# Creating the confusion matrix for the decision tree using the cost matrix
+cm2_simple <- 
+  confusionMatrix(data = car_pred2_simple,
+                  reference = car_test$acceptability,
+                  positive = "accept",
+                  dnn = c("predicted", "actual"))
+
+cm2_simple
+
+```
+
+
+#### Same conclusion either way!
+
+The accuracy using a cost matrix is `r cm2_complex$overall['Accuracy']` or `r cm2_simple$overall['Accuracy']`, which is slightly higher than not using the cost matrix. 
+
+The result is surprising! Typically the accuracy is lower when using a cost matrix because the tree isn't trying to minimize the misclassification rate, but the misclassification **cost** instead! 
+
+Typically, some additional *reject* cars will be classified as accept when they should be rejected since the other error is 3x as costly
+
+
+
+###  h) Conclusions
+
+As long as they write something similar to what was written after the accuracy in these solutions, then it's fine!
+
